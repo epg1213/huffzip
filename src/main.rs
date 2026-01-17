@@ -15,11 +15,14 @@ struct Args {
 
 fn main() -> Result<(), ZipError> {
     let args = Args::parse();
+    let tar_filename = format!("{}.tar", args.infile);
+    let res;
     if args.decompress {
-        Zipper::decompress(args.infile, args.outfile)?;
+        res = Zipper::decompress(args.infile, tar_filename.as_str(), args.outfile);
     } else {
-        Zipper::new().compress(args.infile, args.outfile)?;
+        res = Zipper::new().compress(args.infile, tar_filename.as_str(), args.outfile);
     }
-    Ok(())
+    std::fs::remove_file(tar_filename)?;
+    res
 }
 

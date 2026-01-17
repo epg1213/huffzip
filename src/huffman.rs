@@ -4,6 +4,8 @@ use crate::tree::node_tree::Tree;
 use crate::utils::*;
 use serde::{Serialize, Deserialize};
 use postcard::{to_stdvec, from_bytes};
+use std::fs::File;
+use tar::{Builder, Archive};
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq)]
 pub struct Zipper {
@@ -28,10 +30,14 @@ impl Zipper {
         Ok(zipper)
     }
 
-    pub fn compress(&mut self, filename: impl AsRef<str>, outfile: impl AsRef<str>) -> Result<(), ZipError> {
-        let map = CompressionMap::from(&Tree::from_file(filename.as_ref())?);
+    pub fn compress(&mut self, filename: impl AsRef<str>, tar_filename: impl AsRef<str>, outfile: impl AsRef<str>) -> Result<(), ZipError> {
+        let tar_file = File::create(&tar_filename.as_ref())?;
+        let mut t = Builder::new(tar_file);
+        t.append_dir_all(filename.as_ref(), filename.as_ref())?;
+        t.finish()?;
+        let map = CompressionMap::from(&Tree::from_file(&tar_filename)?);
         let mut result = vec![];
-        for byte in read_bytes(filename.as_ref())?.iter() {
+        for byte in read_bytes(&tar_filename)?.iter() {
             if let Some(mut boolvec) = map.get(byte) {
                 result.append(&mut boolvec);
             }
@@ -42,7 +48,7 @@ impl Zipper {
         Ok(())
     }
 
-    pub fn decompress(filename: impl AsRef<str>, outfile: impl AsRef<str>) -> Result<(), ZipError> {
+    pub fn decompress(filename: impl AsRef<str>, tar_filename: impl AsRef<str>, outfile: impl AsRef<str>) -> Result<(), ZipError> {
         let zipper = Zipper::from_file(filename.as_ref())?;
         let mut data = vec_u8_to_vec_bool(zipper.bytes);
         let tree = Tree::from(&zipper.map);
@@ -50,7 +56,10 @@ impl Zipper {
         while let Some(byte) = tree.search(&mut data) {
             raw_data.push(byte);
         }
-        write_bytes(outfile, raw_data)?;
+        write_bytes(&tar_filename, raw_data)?;
+        let tar_file = File::open(tar_filename.as_ref())?;
+        let mut archive = Archive::new(tar_file);
+        archive.unpack(outfile.as_ref())?;
         Ok(())
     }
 }
